@@ -185,7 +185,7 @@ button{font:inherit}
 .analysis-msg{color:#60646d;font-weight:850;min-height:26px}
 
 .result-hero{overflow:hidden;padding:0 0 24px;text-align:center;background:linear-gradient(180deg,#fffefb,#fff8e9)}
-.result-img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;border-bottom:4px solid var(--line)}
+.result-img{width:100%;aspect-ratio:1/1;object-fit:contain;object-position:center;display:block;background:#fff;border-bottom:4px solid var(--line)}
 .result-body{padding:24px 22px 0}
 .result-label{font-size:12px;font-weight:1000;color:var(--primary);letter-spacing:.04em}
 .result-title{font-size:clamp(29px,7vw,44px);line-height:1.12;letter-spacing:-.05em;margin:8px 0 12px;word-break:keep-all;font-weight:1000}
@@ -466,8 +466,21 @@ function runAnalysis(){
   setTimeout(()=>{clearInterval(it);currentResult=calculateResult();persistResult(currentResult);renderResult(currentResult);showScreen('resultScreen')},1850)
 }
 function persistResult(r){const unlocked=getUnlocked();if(!unlocked.includes(r.mbti)){unlocked.push(r.mbti);saveUnlocked(unlocked)}localStorage.setItem('hhp_testCount',String(getTestCount()+1));localStorage.setItem('hhp_lastResult',JSON.stringify(r));refreshHome()}
+function normalizeCharacterImage(image){
+  image.addEventListener('load',()=>{
+    const size=image.naturalWidth;const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0);
+    const pixels=ctx.getImageData(0,0,size,size).data;const visited=new Uint8Array(size*size);const queue=[];const background=[];const tolerance=34;
+    const color=(x,y)=>{const i=(y*size+x)*4;return [pixels[i],pixels[i+1],pixels[i+2]]};
+    const matches=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]))<tolerance;
+    for(let x=0;x<size;x++){queue.push([x,0]);queue.push([x,size-1])}for(let y=1;y<size-1;y++){queue.push([0,y]);queue.push([size-1,y])}
+    while(queue.length){const [x,y]=queue.pop();const index=y*size+x;if(visited[index])continue;visited[index]=1;const sample=color(x,y);const edge=color(0,0);if(!matches(sample,edge))continue;background.push(index);if(x>0)queue.push([x-1,y]);if(x<size-1)queue.push([x+1,y]);if(y>0)queue.push([x,y-1]);if(y<size-1)queue.push([x,y+1])}
+    const backgroundSet=new Uint8Array(size*size);background.forEach((index)=>{backgroundSet[index]=1});let minX=size,minY=size,maxX=-1,maxY=-1;
+    for(let y=0;y<size;y++)for(let x=0;x<size;x++){if(!backgroundSet[y*size+x]){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)}}
+    if(maxX<0||maxY<0)return;const padding=Math.round((maxX-minX+1)*.12);minX=Math.max(0,minX-padding);minY=Math.max(0,minY-padding);maxX=Math.min(size-1,maxX+padding);maxY=Math.min(size-1,maxY+padding);const cropSize=Math.max(maxX-minX+1,maxY-minY+1);const normalized=document.createElement('canvas');normalized.width=size;normalized.height=size;const normalizedContext=normalized.getContext('2d');normalizedContext.drawImage(canvas,minX,minY,cropSize,cropSize,0,0,size,size);image.src=normalized.toDataURL('image/png');
+  },{once:true});
+}
 function renderResult(r){
-  currentResult=r;const c=characters[r.mbti];$('resultImage').src=c.image;$('resultTitle').textContent=c.name;$('resultQuote').textContent=`“${c.quotes[r.quoteIndex%3]}”`;$('resultMbti').textContent=`${r.mbti} 성향`;$('resultDescription').textContent=c.description;
+  currentResult=r;const c=characters[r.mbti];const resultImage=$('resultImage');resultImage.className='result-img';normalizeCharacterImage(resultImage);resultImage.src=c.image;$('resultTitle').textContent=c.name;$('resultQuote').textContent=`“${c.quotes[r.quoteIndex%3]}”`;$('resultMbti').textContent=`${r.mbti} 성향`;$('resultDescription').textContent=c.description;
   const bars=$('axisBars');bars.innerHTML='';AXES.forEach(({a,b})=>{const dom=r.ratios[a]>r.ratios[b]?a:b;const other=dom===a?b:a;const row=document.createElement('div');row.className='axis-row';row.innerHTML=`<div class="axis-labels"><span class="${dom===a?'axis-dominant':''}">${a} ${r.ratios[a]}%</span><span class="${dom===b?'axis-dominant':''}">${b} ${r.ratios[b]}%</span></div><div class="axis-track"><div class="axis-fill" style="width:${r.ratios[a]}%"></div></div>`;bars.appendChild(row)});
   const sg=$('statsGrid');sg.innerHTML='';Object.entries(STAT_LABELS).forEach(([k,label])=>{const e=document.createElement('div');e.className='stat';e.innerHTML=`<div class="stat-head"><span>${label}</span><b>${r.stats[k]}%</b></div><div class="stat-track"><div class="stat-fill" style="width:${r.stats[k]}%"></div></div>`;sg.appendChild(e)});
   $('bestMatch').textContent=characters[c.best].name;$('worstMatch').textContent=characters[c.worst].name;$('manualText').textContent=c.manual;$('tipText').textContent=c.tip;
