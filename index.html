@@ -490,8 +490,25 @@ async function makeResultCanvas(){
 }
 function canvasToBlob(canvas){return new Promise(resolve=>canvas.toBlob(resolve,'image/png',.95))}
 async function saveResultCard(){const canvas=await makeResultCanvas();if(!canvas)return;const blob=await canvasToBlob(canvas);const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`오늘도_인간인척_${currentResult.mbti}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('결과 카드를 저장했습니다.')}
+const SHARE_URL='https://github.com/babang9/human-mbti';
 async function shareResult(){
-  if(!currentResult)return;try{const canvas=await makeResultCanvas();const blob=await canvasToBlob(canvas);const file=new File([blob],`오늘도_인간인척_${currentResult.mbti}.png`,{type:'image/png'});const data={title:'오늘도 인간인 척',text:resultText()};if(location.protocol.startsWith('http'))data.url=location.href;if(navigator.canShare&&navigator.canShare({files:[file]})){data.files=[file]}if(navigator.share){await navigator.share(data)}else{await copyResult()}}catch(e){if(e&&e.name!=='AbortError')await copyResult()}
+  if(!currentResult)return;
+  const shareText=`${resultText()}\n${SHARE_URL}`;
+  try{
+    const canvas=await makeResultCanvas();
+    const blob=await canvasToBlob(canvas);
+    const file=new File([blob],`오늘도_인간인척_${currentResult.mbti}.png`,{type:'image/png'});
+    const data={title:'오늘도 인간인 척',text:resultText(),url:SHARE_URL};
+    if(navigator.canShare&&navigator.canShare({files:[file]})) data.files=[file];
+    if(navigator.share){
+      await navigator.share(data);
+    }else{
+      try{await navigator.clipboard.writeText(shareText);toast('공유 링크를 복사했습니다.')}catch{fallbackCopy(shareText)}
+    }
+  }catch(e){
+    if(e&&e.name==='AbortError')return;
+    try{await navigator.clipboard.writeText(shareText);toast('공유 링크를 복사했습니다.')}catch{fallbackCopy(shareText)}
+  }
 }
 
 function renderCollection(){
